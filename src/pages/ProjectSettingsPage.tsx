@@ -162,7 +162,7 @@ export default function ProjectSettingsPage({ project, members, onUpdate, onRefr
                   {inviteLoading ? 'Adding...' : 'Add'}
                 </button>
               </div>
-              <p className="text-xs text-slate-400">The user must already have an account in ProjectFlow.</p>
+              <p className="text-xs text-slate-400">The user must already have an account in Rijaah.</p>
             </form>
           )}
         </div>
