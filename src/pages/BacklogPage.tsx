@@ -14,7 +14,7 @@ interface Props {
   issues: Issue[];
   sprints: Sprint[];
   members: ProjectMember[];
-  onCreateIssue: (payload: object) => Promise<unknown>;
+  onCreateIssue: (payload: { title: string; type: string; status: string; priority: string; sprint_id?: string | null; assignee_id?: string | null; story_points?: number | null; description?: string; reporter_id?: string }) => Promise<unknown>;
   onUpdateIssue: (id: string, update: Partial<Issue>) => Promise<boolean>;
   onDeleteIssue: (id: string) => Promise<void>;
 }

@@ -34,34 +34,20 @@ export default function ProjectSettingsPage({ project, members, onUpdate, onRefr
     setInviteError('');
     setInviteSuccess('');
     setInviteLoading(true);
-    const { data: profiles } = await supabase
+    const { data: profileByName } = await supabase
       .from('profiles')
       .select('id, full_name')
-      .ilike('id', '%');
-    const { data: users } = await supabase.auth.admin?.listUsers?.() as unknown as { data: { users: { id: string; email: string }[] } } ?? { data: { users: [] } };
-    const found = (users?.users ?? []).find((u: { id: string; email: string }) => u.email?.toLowerCase() === inviteEmail.toLowerCase());
-    if (!found) {
-      const { data: profileByName } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .ilike('full_name', inviteEmail);
-      if (profileByName && profileByName.length > 0) {
-        const already = members.find(m => m.user_id === profileByName[0].id);
-        if (already) { setInviteError('User is already a member'); setInviteLoading(false); return; }
-        await supabase.from('project_members').insert({ project_id: project.id, user_id: profileByName[0].id, role: 'member' });
-        setInviteSuccess(`${profileByName[0].full_name} added to project`);
-        setInviteEmail('');
-        await onRefreshMembers();
-      } else {
-        setInviteError('User not found. Try searching by display name.');
-      }
-    } else {
-      const already = members.find(m => m.user_id === found.id);
+      .ilike('full_name', inviteEmail);
+    if (profileByName && profileByName.length > 0) {
+      const foundProfile = profileByName[0] as unknown as { id: string; full_name: string };
+      const already = members.find(m => m.user_id === foundProfile.id);
       if (already) { setInviteError('User is already a member'); setInviteLoading(false); return; }
-      await supabase.from('project_members').insert({ project_id: project.id, user_id: found.id, role: 'member' });
-      setInviteSuccess('User added to project');
+      await supabase.from('project_members').insert({ project_id: project.id, user_id: foundProfile.id, role: 'member' });
+      setInviteSuccess(`${foundProfile.full_name} added to project`);
       setInviteEmail('');
       await onRefreshMembers();
+    } else {
+      setInviteError('User not found. Try searching by display name.');
     }
     setInviteLoading(false);
   }

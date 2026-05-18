@@ -29,7 +29,8 @@ export function useProjects() {
       .select()
       .single();
     if (error || !data) return null;
-    await supabase.from('project_members').insert({ project_id: data.id, user_id: user.id, role: 'owner' });
+    const projectId = (data as Record<string, unknown>).id as string;
+    await supabase.from('project_members').insert({ project_id: projectId, user_id: user.id, role: 'owner' });
     await fetchProjects();
     return data as Project;
   }

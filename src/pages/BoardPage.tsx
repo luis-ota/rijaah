@@ -18,7 +18,7 @@ interface Props {
   issues: Issue[];
   sprints: Sprint[];
   members: ProjectMember[];
-  onCreateIssue: (payload: Parameters<typeof import('../hooks/useIssues').useIssues>[0] extends null ? never : object) => Promise<unknown>;
+  onCreateIssue: (payload: { title: string; type: string; status: string; priority: string; sprint_id?: string | null; assignee_id?: string | null; story_points?: number | null; description?: string; reporter_id?: string }) => Promise<unknown>;
   onUpdateIssue: (id: string, update: Partial<Issue>) => Promise<boolean>;
   onDeleteIssue: (id: string) => Promise<void>;
   onMoveIssue?: (id: string, newStatus: IssueStatus) => Promise<boolean>;
@@ -197,12 +197,15 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
                       {dragOverColumn === col.status && dragOverIndex === index && (
                         <div className="h-1 rounded-full bg-blue-400 mb-2 mx-1 animate-pulse" />
                       )}
-                      <IssueCard
-                        issue={issue}
-                        projectKey={project.key}
-                        onClick={() => setSelectedIssue(issue)}
+                      <div
                         onDragOver={e => handleDragOverItem(e, index)}
-                      />
+                      >
+                        <IssueCard
+                          issue={issue}
+                          projectKey={project.key}
+                          onClick={() => setSelectedIssue(issue)}
+                        />
+                      </div>
                     </div>
                   ))}
                   {/* Drop indicator at end of column */}
