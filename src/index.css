@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.drag-ghost {
+  opacity: 0.5;
+  transform: rotate(2deg);
+}
+
+.drop-target {
+  background-color: theme('colors.blue.50');
+  border-color: theme('colors.blue.300');
+}

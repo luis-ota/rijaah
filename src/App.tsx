@@ -24,7 +24,7 @@ function AppContent() {
   const [view, setView] = useState<View>('projects');
   const [showCreateProject, setShowCreateProject] = useState(false);
 
-  const { issues, createIssue, updateIssue, deleteIssue } = useIssues(activeProject?.id ?? null);
+  const { issues, createIssue, updateIssue, deleteIssue, moveIssue } = useIssues(activeProject?.id ?? null);
   const { sprints, createSprint, updateSprint, deleteSprint } = useSprints(activeProject?.id ?? null);
   const { members, refetch: refetchMembers } = useMembers(activeProject?.id ?? null);
 
@@ -80,6 +80,7 @@ function AppContent() {
             onCreateIssue={createIssue}
             onUpdateIssue={updateIssue}
             onDeleteIssue={deleteIssue}
+            onMoveIssue={moveIssue}
           />
         ) : view === 'backlog' ? (
           <BacklogPage

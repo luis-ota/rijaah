@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Plus, Filter, Search } from 'lucide-react';
 import type { Project, Issue, IssueStatus, Sprint, ProjectMember } from '../types';
 import IssueCard from '../components/IssueCard';
@@ -21,15 +21,19 @@ interface Props {
   onCreateIssue: (payload: Parameters<typeof import('../hooks/useIssues').useIssues>[0] extends null ? never : object) => Promise<unknown>;
   onUpdateIssue: (id: string, update: Partial<Issue>) => Promise<boolean>;
   onDeleteIssue: (id: string) => Promise<void>;
+  onMoveIssue?: (id: string, newStatus: IssueStatus) => Promise<boolean>;
 }
 
-export default function BoardPage({ project, issues, sprints, members, onCreateIssue, onUpdateIssue, onDeleteIssue }: Props) {
+export default function BoardPage({ project, issues, sprints, members, onCreateIssue, onUpdateIssue, onDeleteIssue, onMoveIssue }: Props) {
   const { user } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<IssueStatus>('todo');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [search, setSearch] = useState('');
   const [filterAssignee, setFilterAssignee] = useState<string>('');
+  const [dragOverColumn, setDragOverColumn] = useState<IssueStatus | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const dragCounterRef = useRef<Record<string, number>>({});
 
   const activeSprint = sprints.find(s => s.status === 'active');
 
@@ -44,6 +48,56 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
     setCreateDefaultStatus(status);
     setShowCreate(true);
   }
+
+  const handleDragEnterColumn = useCallback((e: React.DragEvent, status: IssueStatus) => {
+    e.preventDefault();
+    dragCounterRef.current[status] = (dragCounterRef.current[status] || 0) + 1;
+    setDragOverColumn(status);
+  }, []);
+
+  const handleDragLeaveColumn = useCallback((e: React.DragEvent, status: IssueStatus) => {
+    e.preventDefault();
+    dragCounterRef.current[status] = (dragCounterRef.current[status] || 0) - 1;
+    if (dragCounterRef.current[status] <= 0) {
+      dragCounterRef.current[status] = 0;
+      setDragOverColumn(prev => prev === status ? null : prev);
+      setDragOverIndex(null);
+    }
+  }, []);
+
+  const handleDragOverItem = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(index);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetStatus: IssueStatus, targetIndex: number) => {
+    e.preventDefault();
+    const issueId = e.dataTransfer.getData('text/plain');
+    if (!issueId) return;
+
+    setDragOverColumn(null);
+    setDragOverIndex(null);
+    dragCounterRef.current = {};
+
+    const issue = issues.find(i => i.id === issueId);
+    if (!issue) return;
+
+    if (issue.status === targetStatus && targetIndex === filtered.filter(i => i.status === targetStatus).indexOf(issue)) {
+      return;
+    }
+
+    if (onMoveIssue) {
+      await onMoveIssue(issueId, targetStatus);
+    } else {
+      await onUpdateIssue(issueId, { status: targetStatus });
+    }
+  }, [issues, filtered, onMoveIssue, onUpdateIssue]);
+
+  const handleDragOverColumn = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
 
   return (
     <div className="flex flex-col h-full">
@@ -110,9 +164,17 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
         <div className="flex gap-4 p-6 h-full min-w-max">
           {COLUMNS.map(col => {
             const colIssues = filtered.filter(i => i.status === col.status);
+            const isOver = dragOverColumn === col.status;
             return (
-              <div key={col.status} className="w-72 flex flex-col">
-                <div className="flex items-center justify-between mb-3">
+              <div
+                key={col.status}
+                className={`w-72 flex flex-col rounded-xl transition-colors ${isOver ? 'bg-blue-50/60' : ''}`}
+                onDragEnter={e => handleDragEnterColumn(e, col.status)}
+                onDragLeave={e => handleDragLeaveColumn(e, col.status)}
+                onDragOver={handleDragOverColumn}
+                onDrop={e => handleDrop(e, col.status, colIssues.length)}
+              >
+                <div className="flex items-center justify-between mb-3 px-1">
                   <div className="flex items-center gap-2">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${col.color}`}>
                       {col.label}
@@ -128,19 +190,31 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
                   </button>
                 </div>
 
-                <div className="flex-1 space-y-2 min-h-[100px]">
-                  {colIssues.map(issue => (
-                    <IssueCard
-                      key={issue.id}
-                      issue={issue}
-                      projectKey={project.key}
-                      onClick={() => setSelectedIssue(issue)}
-                    />
+                <div className="flex-1 space-y-2 min-h-[100px] px-1">
+                  {colIssues.map((issue, index) => (
+                    <div key={issue.id}>
+                      {/* Drop indicator between cards */}
+                      {dragOverColumn === col.status && dragOverIndex === index && (
+                        <div className="h-1 rounded-full bg-blue-400 mb-2 mx-1 animate-pulse" />
+                      )}
+                      <IssueCard
+                        issue={issue}
+                        projectKey={project.key}
+                        onClick={() => setSelectedIssue(issue)}
+                        onDragOver={e => handleDragOverItem(e, index)}
+                      />
+                    </div>
                   ))}
+                  {/* Drop indicator at end of column */}
+                  {dragOverColumn === col.status && (dragOverIndex === null || dragOverIndex >= colIssues.length) && (
+                    <div className="h-1 rounded-full bg-blue-400 mb-2 mx-1 animate-pulse" />
+                  )}
                   {colIssues.length === 0 && (
                     <div
                       onClick={() => openCreateWithStatus(col.status)}
-                      className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center cursor-pointer hover:border-slate-300 hover:bg-slate-50 transition-all"
+                      className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all ${
+                        isOver ? 'drop-target border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
                     >
                       <p className="text-xs text-slate-400">Drop issues here or click to add</p>
                     </div>

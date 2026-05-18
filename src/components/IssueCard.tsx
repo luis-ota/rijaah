@@ -7,13 +7,24 @@ interface Props {
   issue: Issue;
   projectKey: string;
   onClick: () => void;
+  onDragStart?: (e: React.DragEvent) => void;
 }
 
-export default function IssueCard({ issue, projectKey, onClick }: Props) {
+export default function IssueCard({ issue, projectKey, onClick, onDragStart }: Props) {
   return (
     <div
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', issue.id);
+        e.currentTarget.classList.add('drag-ghost');
+        onDragStart?.(e);
+      }}
+      onDragEnd={e => {
+        e.currentTarget.classList.remove('drag-ghost');
+      }}
       onClick={onClick}
-      className="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:border-blue-400 hover:shadow-sm transition-all group"
+      className="bg-white border border-slate-200 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-blue-400 hover:shadow-sm transition-all group"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <p className="text-sm text-slate-800 font-medium leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">
