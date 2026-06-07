@@ -10,12 +10,16 @@ services:
     ports: []
 
   backend:
+    build:
+      network: host
     network_mode: host
     ports: []
     environment:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/rijaah
 
   frontend:
+    build:
+      network: host
     network_mode: host
     ports: []
     environment:
