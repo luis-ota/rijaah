@@ -14,10 +14,11 @@ interface Props {
     story_points?: number | null;
     description?: string;
     reporter_id?: string;
+    due_date?: string | null;
   }) => Promise<unknown>;
   sprints: Sprint[];
   members: ProjectMember[];
-  defaultStatus?: IssueStatus;
+  defaultStatus?: string;
   defaultSprintId?: string | null;
   reporterId?: string;
 }
@@ -34,11 +35,12 @@ export default function CreateIssueModal({ onClose, onCreate, sprints, members, 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<IssueType>('task');
-  const [status, setStatus] = useState<IssueStatus>(defaultStatus);
+  const [status, setStatus] = useState<string>(defaultStatus);
   const [priority, setPriority] = useState<IssuePriority>('medium');
   const [sprintId, setSprintId] = useState<string | null>(defaultSprintId);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [storyPoints, setStoryPoints] = useState<string>('');
+  const [dueDate, setDueDate] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
@@ -55,6 +57,7 @@ export default function CreateIssueModal({ onClose, onCreate, sprints, members, 
       assignee_id: assigneeId,
       story_points: storyPoints ? parseInt(storyPoints) : null,
       reporter_id: reporterId,
+      due_date: dueDate || null,
     });
     setLoading(false);
     onClose();
@@ -164,6 +167,16 @@ export default function CreateIssueModal({ onClose, onCreate, sprints, members, 
                 {members.map(m => <option key={m.user_id} value={m.user_id}>{m.profile?.full_name}</option>)}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Due date</label>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={e => setDueDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           </div>
         </form>
 

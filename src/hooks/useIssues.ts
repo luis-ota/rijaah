@@ -9,16 +9,10 @@ export function useIssues(projectId: string | null) {
   const fetchIssues = useCallback(async () => {
     if (!projectId) { setLoading(false); return; }
     setLoading(true);
-    const { data } = await supabase
-      .from('issues')
-      .select(`
-        *,
-        assignee:profiles!issues_assignee_id_fkey(id, full_name, avatar_url),
-        reporter:profiles!issues_reporter_id_fkey(id, full_name, avatar_url)
-      `)
-      .eq('project_id', projectId)
-      .order('order', { ascending: true });
-    if (data) setIssues(data as unknown as Issue[]);
+    const { data } = await supabase.from<Issue>('issues')
+      .select('*')
+      .eq('project_id', projectId);
+    if (data) setIssues(data);
     setLoading(false);
   }, [projectId]);
 
@@ -34,25 +28,22 @@ export function useIssues(projectId: string | null) {
     story_points?: number | null;
     description?: string;
     reporter_id?: string;
+    due_date?: string | null;
   }) {
     if (!projectId) return null;
-    const { data, error } = await supabase
-      .from('issues')
+    const { data, error } = await supabase.from<Issue>('issues')
       .insert({ ...payload, project_id: projectId })
       .select()
       .single();
     if (error || !data) return null;
     await fetchIssues();
-    return data as Issue;
+    return data;
   }
 
   async function updateIssue(id: string, update: Partial<Issue>) {
-    const { error } = await supabase
-      .from('issues')
-      .update({ ...update, updated_at: new Date().toISOString() })
-      .eq('id', id);
-    if (!error) await fetchIssues();
-    return !error;
+    await supabase.from('issues').update(update).eq('id', id);
+    await fetchIssues();
+    return true;
   }
 
   async function deleteIssue(id: string) {
@@ -61,7 +52,9 @@ export function useIssues(projectId: string | null) {
   }
 
   async function moveIssue(id: string, newStatus: IssueStatus) {
-    return updateIssue(id, { status: newStatus });
+    await supabase.from('issues').update({ status: newStatus }).eq('id', id);
+    await fetchIssues();
+    return true;
   }
 
   return { issues, loading, createIssue, updateIssue, deleteIssue, moveIssue, refetch: fetchIssues };

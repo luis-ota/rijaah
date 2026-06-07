@@ -11,11 +11,8 @@ export function useProjects() {
   const fetchProjects = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
-      .from('projects')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (data) setProjects(data as Project[]);
+    const { data } = await supabase.from<Project>('projects').select('*');
+    if (data) setProjects(data);
     setLoading(false);
   }, [user]);
 
@@ -23,16 +20,14 @@ export function useProjects() {
 
   async function createProject(name: string, key: string, description: string, color: string) {
     if (!user) return null;
-    const { data, error } = await supabase
-      .from('projects')
+    const { data, error } = await supabase.from<Project>('projects')
       .insert({ name, key, description, owner_id: user.id, avatar_color: color })
       .select()
       .single();
     if (error || !data) return null;
-    const projectId = (data as Record<string, unknown>).id as string;
-    await supabase.from('project_members').insert({ project_id: projectId, user_id: user.id, role: 'owner' });
+    await supabase.from('project_members').insert({ project_id: data.id, user_id: user.id, role: 'owner' });
     await fetchProjects();
-    return data as Project;
+    return data;
   }
 
   return { projects, loading, createProject, refetch: fetchProjects };

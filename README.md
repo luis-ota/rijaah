@@ -1,64 +1,99 @@
 # Rijaah
 
-Project management and issue tracking tool.
+Project management and issue tracking tool (Jira clone) — React + Express + Postgres.
 
-## Prerequisites
+## Quick Start (Docker)
 
-- [Bun](https://bun.sh/) installed globally
-- A Supabase project (URL and anon key)
-
-## Getting Started
-
-### 1. Install Bun
+A forma mais rápida de rodar o projeto completo (banco, backend, frontend e seeder) é com Docker:
 
 ```bash
-curl -fsSL https://bun.sh/install | bash
+docker compose up -d --build
 ```
 
-### 2. Install dependencies
+Depois de ~30 segundos, abra `http://localhost:5173` e faça login com:
+- **Email:** `admin@admin.com`
+- **Senha:** `admin123`
 
+O compose inicia três serviços:
+- `postgres` — banco de dados na porta 5432 (volume `pgdata` para persistência)
+- `backend` — API Express na porta 3001 (executa migrations e seeder automaticamente na primeira vez)
+- `frontend` — build estático do Vite servido via nginx na porta 5173 (faz proxy de `/api/*` para o backend)
+
+Comandos úteis:
+```bash
+npm run docker:up      # build + start
+npm run docker:down    # parar containers
+npm run docker:logs    # ver logs
+npm run docker:reset   # apagar tudo (incluindo dados) e recomeçar
+```
+
+## Desenvolvimento Local (sem Docker)
+
+### Pré-requisitos
+- [Bun](https://bun.sh/) ou Node.js 20+
+- PostgreSQL 16+ rodando localmente
+
+### 1. Instalar dependências
 ```bash
 bun install
+cd server && bun install && cd ..
 ```
 
-### 3. Configure environment variables
-
-Create a `.env` file in the project root with your Supabase credentials:
-
-```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+### 2. Subir Postgres (opção via Docker)
+```bash
+docker run -d --name rijaah-postgres -p 5432:5432 \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=rijaah \
+  postgres:16-alpine
 ```
 
-### 4. Run the development server
+### 3. Rodar backend (terminal 1)
+```bash
+cd server
+node index.js
+# banco é migrado e populado automaticamente na primeira vez
+```
 
+### 4. Rodar frontend (terminal 2)
 ```bash
 bun run dev
 ```
 
-The app will be available at `http://localhost:5173`.
+Abre em `http://localhost:5173`.
 
-### 5. Build for production
+## Logins Demo (após seeder)
 
-```bash
-bun run build
+| Email | Senha |
+|-------|-------|
+| `admin@admin.com` | `admin123` |
+| `alice@demo.com` | `demo123` |
+| `bob@demo.com` | `demo123` |
+| `carol@demo.com` | `demo123` |
+| `dave@demo.com` | `demo123` |
+
+## Estrutura
+
 ```
-
-### 6. Preview the production build
-
-```bash
-bun run preview
+.
+├── docker-compose.yml      # orquestração dos 3 serviços
+├── Dockerfile              # build do frontend (vite build + nginx)
+├── nginx.conf              # proxy reverso /api → backend
+├── server/
+│   ├── Dockerfile          # build do backend (node alpine)
+│   ├── index.js            # API Express
+│   ├── migrations/         # schema SQL (executado na inicialização)
+│   └── seed/               # dados demo PT-BR (executado se banco vazio)
+├── src/                    # frontend React + Vite
+│   ├── components/
+│   ├── pages/
+│   ├── hooks/
+│   ├── lib/
+│   └── types/
+└── package.json
 ```
-
-## Default Login
-
-- **Email:** admin@admin.com
-- **Password:** admin123
 
 ## Tech Stack
 
-- React + TypeScript
-- Vite
-- Tailwind CSS
-- Supabase (Auth, Database, RLS)
-- Lucide React (icons)
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, Lucide React, Recharts, date-fns
+- **Backend:** Node.js 20, Express, pg (Postgres driver)
+- **Banco:** PostgreSQL 16
+- **Servidor web:** nginx (produção via Docker)

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { X, Trash2, MessageCircle, Send } from 'lucide-react';
-import type { Issue, IssueType, IssuePriority, IssueStatus, Sprint, ProjectMember, Comment } from '../types';
+import { X, Trash2, MessageCircle, Send, Pencil, Check, Clock } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import type { Issue, IssueType, IssuePriority, IssueStatus, Sprint, ProjectMember, Comment, Label, IssueLabel } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import IssueTypeBadge from './IssueTypeBadge';
 import PriorityBadge from './PriorityBadge';
 import Avatar from './Avatar';
+import LabelPicker from './LabelPicker';
 
 const STATUSES: IssueStatus[] = ['todo', 'in_progress', 'in_review', 'done'];
 const STATUS_LABELS: Record<IssueStatus, string> = {
@@ -19,12 +21,16 @@ interface Props {
   projectKey: string;
   sprints: Sprint[];
   members: ProjectMember[];
+  projectLabels?: Label[];
+  issueLabels?: IssueLabel[];
   onClose: () => void;
   onUpdate: (id: string, update: Partial<Issue>) => Promise<boolean>;
   onDelete: (id: string) => Promise<void>;
+  onSetLabels?: (issueId: string, labelIds: string[]) => Promise<void>;
+  onCreateLabel?: (name: string) => void;
 }
 
-export default function IssueDetailModal({ issue, projectKey, sprints, members, onClose, onUpdate, onDelete }: Props) {
+export default function IssueDetailModal({ issue, projectKey, sprints, members, projectLabels = [], issueLabels = [], onClose, onUpdate, onDelete, onSetLabels, onCreateLabel }: Props) {
   const { user, profile } = useAuth();
   const [title, setTitle] = useState(issue.title);
   const [description, setDescription] = useState(issue.description || '');
@@ -34,6 +40,8 @@ export default function IssueDetailModal({ issue, projectKey, sprints, members, 
   const [commentText, setCommentText] = useState('');
   const [loadingComment, setLoadingComment] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentText, setEditCommentText] = useState('');
 
   useEffect(() => {
     fetchComments();
@@ -42,7 +50,7 @@ export default function IssueDetailModal({ issue, projectKey, sprints, members, 
   async function fetchComments() {
     const { data } = await supabase
       .from('comments')
-      .select('*, author:profiles(*)')
+      .select('*')
       .eq('issue_id', issue.id)
       .order('created_at', { ascending: true });
     if (data) setComments(data as unknown as Comment[]);
@@ -76,18 +84,32 @@ export default function IssueDetailModal({ issue, projectKey, sprints, members, 
     await fetchComments();
   }
 
+  async function startEditComment(c: Comment) {
+    setEditingCommentId(c.id);
+    setEditCommentText(c.body);
+  }
+
+  async function saveEditComment() {
+    if (!editingCommentId || !editCommentText.trim()) return;
+    await supabase.from('comments').update({ body: editCommentText.trim() }).eq('id', editingCommentId);
+    setEditingCommentId(null);
+    setEditCommentText('');
+    await fetchComments();
+  }
+
   function formatDate(d: string) {
     return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  const currentLabelIds = issueLabels.filter(il => il.issue_id === issue.id).map(il => il.label_id);
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
           <div className="flex items-center gap-2">
             <IssueTypeBadge type={issue.type} showLabel />
-            <span className="text-xs text-slate-400 font-medium">{projectKey}-{issue.order || '?'}</span>
+            <span className="text-xs text-slate-400 font-medium">{issue.key || `${projectKey}-${issue.order || '?'}`}</span>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -104,9 +126,7 @@ export default function IssueDetailModal({ issue, projectKey, sprints, members, 
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          {/* Main */}
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
-            {/* Title */}
             {editingTitle ? (
               <input
                 autoFocus
@@ -125,7 +145,6 @@ export default function IssueDetailModal({ issue, projectKey, sprints, members, 
               </h2>
             )}
 
-            {/* Description */}
             <div>
               <h3 className="text-sm font-semibold text-slate-700 mb-2">Description</h3>
               {editingDesc ? (
@@ -156,32 +175,75 @@ export default function IssueDetailModal({ issue, projectKey, sprints, members, 
               )}
             </div>
 
-            {/* Comments */}
+            {onSetLabels && projectLabels.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-2">Labels</h3>
+                <LabelPicker
+                  available={projectLabels}
+                  selectedIds={currentLabelIds}
+                  onChange={(ids) => { void onSetLabels(issue.id, ids); }}
+                  onCreateLabel={onCreateLabel}
+                />
+              </div>
+            )}
+
             <div>
               <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
                 <MessageCircle className="w-4 h-4" />
                 Comments {comments.length > 0 && <span className="text-slate-400 font-normal">({comments.length})</span>}
               </h3>
               <div className="space-y-4">
-                {comments.map(c => (
-                  <div key={c.id} className="flex gap-3">
-                    {c.author && <Avatar name={c.author.full_name} url={c.author.avatar_url} size="sm" />}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium text-slate-700">{c.author?.full_name}</span>
-                        <span className="text-xs text-slate-400">{formatDate(c.created_at)}</span>
-                      </div>
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm text-slate-600 whitespace-pre-wrap flex-1">{c.body}</p>
-                        {c.author_id === user?.id && (
-                          <button onClick={() => handleDeleteComment(c.id)} className="text-slate-300 hover:text-red-400 transition-colors shrink-0">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                {comments.map(c => {
+                  const isAuthor = c.author_id === user?.id;
+                  const edited = c.created_at !== c.updated_at;
+                  return (
+                    <div key={c.id} className="flex gap-3">
+                      <Avatar name={c.author?.full_name ?? 'User'} url={c.author?.avatar_url} size="sm" />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-medium text-slate-700">{c.author?.full_name ?? 'User'}</span>
+                          <span className="text-xs text-slate-400" title={formatDate(c.created_at)}>
+                            {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                          </span>
+                          {edited && <span className="text-[10px] text-slate-400 italic">(edited)</span>}
+                        </div>
+                        {editingCommentId === c.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              autoFocus
+                              value={editCommentText}
+                              onChange={e => setEditCommentText(e.target.value)}
+                              className="w-full px-3 py-2 border border-blue-400 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                              rows={3}
+                            />
+                            <div className="flex gap-2">
+                              <button onClick={saveEditComment} className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 flex items-center gap-1">
+                                <Check className="w-3 h-3" /> Save
+                              </button>
+                              <button onClick={() => { setEditingCommentId(null); setEditCommentText(''); }} className="px-3 py-1 text-slate-600 text-xs border border-slate-200 rounded-lg hover:bg-slate-50">
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-start justify-between gap-2 group">
+                            <p className="text-sm text-slate-600 whitespace-pre-wrap flex-1">{c.body}</p>
+                            {isAuthor && (
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                <button onClick={() => startEditComment(c)} className="text-slate-300 hover:text-blue-500 transition-colors">
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => handleDeleteComment(c.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="flex gap-3 mt-4">
                 {profile && <Avatar name={profile.full_name} url={profile.avatar_url} size="sm" />}
@@ -205,7 +267,6 @@ export default function IssueDetailModal({ issue, projectKey, sprints, members, 
             </div>
           </div>
 
-          {/* Sidebar metadata */}
           <div className="w-56 border-l border-slate-100 p-4 space-y-5 overflow-y-auto shrink-0">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Status</label>
@@ -268,6 +329,23 @@ export default function IssueDetailModal({ issue, projectKey, sprints, members, 
             </div>
 
             <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                <Clock className="w-3 h-3" /> Due date
+              </label>
+              <input
+                type="date"
+                defaultValue={issue.due_date?.slice(0, 10) ?? ''}
+                onBlur={e => {
+                  const v = e.target.value || null;
+                  if (v !== (issue.due_date?.slice(0, 10) ?? null)) {
+                    onUpdate(issue.id, { due_date: v });
+                  }
+                }}
+                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Story points</label>
               <input
                 type="number"
@@ -287,12 +365,11 @@ export default function IssueDetailModal({ issue, projectKey, sprints, members, 
 
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Created</label>
-              <p className="text-xs text-slate-500">{formatDate(issue.created_at)}</p>
+              <p className="text-xs text-slate-500" title={issue.created_at}>{formatDate(issue.created_at)}</p>
             </div>
           </div>
         </div>
 
-        {/* Delete confirmation */}
         {confirmDelete && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-2xl z-10">
             <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4">
@@ -315,5 +392,4 @@ export default function IssueDetailModal({ issue, projectKey, sprints, members, 
       </div>
     </div>
   );
-
 }

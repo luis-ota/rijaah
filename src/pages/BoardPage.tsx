@@ -1,24 +1,20 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { Plus, Filter, Search } from 'lucide-react';
 import type { Project, Issue, IssueStatus, Sprint, ProjectMember } from '../types';
 import IssueCard from '../components/IssueCard';
 import CreateIssueModal from '../components/CreateIssueModal';
 import IssueDetailModal from '../components/IssueDetailModal';
 import { useAuth } from '../context/AuthContext';
-
-const COLUMNS: { status: IssueStatus; label: string; color: string }[] = [
-  { status: 'todo', label: 'To Do', color: 'bg-slate-100 text-slate-600' },
-  { status: 'in_progress', label: 'In Progress', color: 'bg-blue-100 text-blue-700' },
-  { status: 'in_review', label: 'In Review', color: 'bg-amber-100 text-amber-700' },
-  { status: 'done', label: 'Done', color: 'bg-emerald-100 text-emerald-700' },
-];
+import { useKanbanColumns } from '../hooks/useKanbanColumns';
+import { useIssueLabelsByProject } from '../hooks/useIssueLabels';
+import { useLabels } from '../hooks/useLabels';
 
 interface Props {
   project: Project;
   issues: Issue[];
   sprints: Sprint[];
   members: ProjectMember[];
-  onCreateIssue: (payload: { title: string; type: string; status: string; priority: string; sprint_id?: string | null; assignee_id?: string | null; story_points?: number | null; description?: string; reporter_id?: string }) => Promise<unknown>;
+  onCreateIssue: (payload: { title: string; type: string; status: string; priority: string; sprint_id?: string | null; assignee_id?: string | null; story_points?: number | null; description?: string; reporter_id?: string; due_date?: string | null }) => Promise<unknown>;
   onUpdateIssue: (id: string, update: Partial<Issue>) => Promise<boolean>;
   onDeleteIssue: (id: string) => Promise<void>;
   onMoveIssue?: (id: string, newStatus: IssueStatus) => Promise<boolean>;
@@ -26,36 +22,59 @@ interface Props {
 
 export default function BoardPage({ project, issues, sprints, members, onCreateIssue, onUpdateIssue, onDeleteIssue, onMoveIssue }: Props) {
   const { user } = useAuth();
+  const { columns } = useKanbanColumns(project.id);
+  const { issueLabels, setLabelsForIssue } = useIssueLabelsByProject(project.id);
+  const { labels: projectLabels, createLabel } = useLabels(project.id);
   const [showCreate, setShowCreate] = useState(false);
-  const [createDefaultStatus, setCreateDefaultStatus] = useState<IssueStatus>('todo');
+  const [createDefaultStatus, setCreateDefaultStatus] = useState<string>('todo');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [search, setSearch] = useState('');
   const [filterAssignee, setFilterAssignee] = useState<string>('');
-  const [dragOverColumn, setDragOverColumn] = useState<IssueStatus | null>(null);
+  const [filterLabel, setFilterLabel] = useState<string>('');
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const dragCounterRef = useRef<Record<string, number>>({});
 
   const activeSprint = sprints.find(s => s.status === 'active');
 
+  const labelsByIssue = useMemo(() => {
+    const m = new Map<string, typeof issueLabels>();
+    for (const il of issueLabels) {
+      const arr = m.get(il.issue_id) ?? [];
+      arr.push(il);
+      m.set(il.issue_id, arr);
+    }
+    return m;
+  }, [issueLabels]);
+
+  const allLabels = useMemo(() => {
+    const map = new Map<string, { name: string; color: string }>();
+    for (const il of issueLabels) {
+      if (!map.has(il.label_id)) map.set(il.label_id, { name: il.name, color: il.color });
+    }
+    return Array.from(map.entries()).map(([id, v]) => ({ id, ...v }));
+  }, [issueLabels]);
+
   const filtered = issues.filter(i => {
     const matchSprint = activeSprint ? i.sprint_id === activeSprint.id : true;
     const matchSearch = i.title.toLowerCase().includes(search.toLowerCase());
     const matchAssignee = filterAssignee ? i.assignee_id === filterAssignee : true;
-    return matchSprint && matchSearch && matchAssignee;
+    const matchLabel = filterLabel ? (labelsByIssue.get(i.id) ?? []).some(l => l.label_id === filterLabel) : true;
+    return matchSprint && matchSearch && matchAssignee && matchLabel;
   });
 
-  function openCreateWithStatus(status: IssueStatus) {
+  function openCreateWithStatus(status: string) {
     setCreateDefaultStatus(status);
     setShowCreate(true);
   }
 
-  const handleDragEnterColumn = useCallback((e: React.DragEvent, status: IssueStatus) => {
+  const handleDragEnterColumn = useCallback((e: React.DragEvent, status: string) => {
     e.preventDefault();
     dragCounterRef.current[status] = (dragCounterRef.current[status] || 0) + 1;
     setDragOverColumn(status);
   }, []);
 
-  const handleDragLeaveColumn = useCallback((e: React.DragEvent, status: IssueStatus) => {
+  const handleDragLeaveColumn = useCallback((e: React.DragEvent, status: string) => {
     e.preventDefault();
     dragCounterRef.current[status] = (dragCounterRef.current[status] || 0) - 1;
     if (dragCounterRef.current[status] <= 0) {
@@ -71,7 +90,7 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
     setDragOverIndex(index);
   }, []);
 
-  const handleDrop = useCallback(async (e: React.DragEvent, targetStatus: IssueStatus, targetIndex: number) => {
+  const handleDrop = useCallback(async (e: React.DragEvent, targetStatus: string, _targetIndex: number) => {
     e.preventDefault();
     const issueId = e.dataTransfer.getData('text/plain');
     if (!issueId) return;
@@ -83,16 +102,16 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
     const issue = issues.find(i => i.id === issueId);
     if (!issue) return;
 
-    if (issue.status === targetStatus && targetIndex === filtered.filter(i => i.status === targetStatus).indexOf(issue)) {
+    if (issue.status === targetStatus) {
       return;
     }
 
     if (onMoveIssue) {
-      await onMoveIssue(issueId, targetStatus);
+      await onMoveIssue(issueId, targetStatus as IssueStatus);
     } else {
-      await onUpdateIssue(issueId, { status: targetStatus });
+      await onUpdateIssue(issueId, { status: targetStatus as IssueStatus });
     }
-  }, [issues, filtered, onMoveIssue, onUpdateIssue]);
+  }, [issues, onMoveIssue, onUpdateIssue]);
 
   const handleDragOverColumn = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -101,7 +120,6 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="px-6 py-4 border-b border-slate-200 bg-white">
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -121,7 +139,7 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
           </button>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -142,6 +160,16 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
               {members.map(m => <option key={m.user_id} value={m.user_id}>{m.profile?.full_name}</option>)}
             </select>
           </div>
+          {allLabels.length > 0 && (
+            <select
+              value={filterLabel}
+              onChange={e => setFilterLabel(e.target.value)}
+              className="border border-slate-200 rounded-lg text-sm px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">All labels</option>
+              {allLabels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          )}
           <div className="ml-auto flex -space-x-2">
             {members.slice(0, 5).map(m => m.profile && (
               <button
@@ -159,30 +187,35 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
         </div>
       </div>
 
-      {/* Board columns */}
       <div className="flex-1 overflow-x-auto">
         <div className="flex gap-4 p-6 h-full min-w-max">
-          {COLUMNS.map(col => {
-            const colIssues = filtered.filter(i => i.status === col.status);
-            const isOver = dragOverColumn === col.status;
+          {columns.length === 0 && (
+            <div className="flex-1 text-center text-sm text-slate-400 py-20">Loading columns...</div>
+          )}
+          {columns.map(col => {
+            const colIssues = filtered.filter(i => i.status === col.key);
+            const isOver = dragOverColumn === col.key;
             return (
               <div
-                key={col.status}
+                key={col.id}
                 className={`w-72 flex flex-col rounded-xl transition-colors ${isOver ? 'bg-blue-50/60' : ''}`}
-                onDragEnter={e => handleDragEnterColumn(e, col.status)}
-                onDragLeave={e => handleDragLeaveColumn(e, col.status)}
+                onDragEnter={e => handleDragEnterColumn(e, col.key)}
+                onDragLeave={e => handleDragLeaveColumn(e, col.key)}
                 onDragOver={handleDragOverColumn}
-                onDrop={e => handleDrop(e, col.status, colIssues.length)}
+                onDrop={e => handleDrop(e, col.key, colIssues.length)}
               >
                 <div className="flex items-center justify-between mb-3 px-1">
                   <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${col.color}`}>
+                    <span
+                      className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                      style={{ backgroundColor: `${col.color}26`, color: col.color }}
+                    >
                       {col.label}
                     </span>
                     <span className="text-xs text-slate-400 font-medium">{colIssues.length}</span>
                   </div>
                   <button
-                    onClick={() => openCreateWithStatus(col.status)}
+                    onClick={() => openCreateWithStatus(col.key)}
                     className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded hover:bg-slate-100"
                     title="Add issue"
                   >
@@ -193,28 +226,25 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
                 <div className="flex-1 space-y-2 min-h-[100px] px-1">
                   {colIssues.map((issue, index) => (
                     <div key={issue.id}>
-                      {/* Drop indicator between cards */}
-                      {dragOverColumn === col.status && dragOverIndex === index && (
+                      {dragOverColumn === col.key && dragOverIndex === index && (
                         <div className="h-1 rounded-full bg-blue-400 mb-2 mx-1 animate-pulse" />
                       )}
-                      <div
-                        onDragOver={e => handleDragOverItem(e, index)}
-                      >
+                      <div onDragOver={e => handleDragOverItem(e, index)}>
                         <IssueCard
                           issue={issue}
                           projectKey={project.key}
+                          labels={labelsByIssue.get(issue.id)}
                           onClick={() => setSelectedIssue(issue)}
                         />
                       </div>
                     </div>
                   ))}
-                  {/* Drop indicator at end of column */}
-                  {dragOverColumn === col.status && (dragOverIndex === null || dragOverIndex >= colIssues.length) && (
+                  {dragOverColumn === col.key && (dragOverIndex === null || dragOverIndex >= colIssues.length) && (
                     <div className="h-1 rounded-full bg-blue-400 mb-2 mx-1 animate-pulse" />
                   )}
                   {colIssues.length === 0 && (
                     <div
-                      onClick={() => openCreateWithStatus(col.status)}
+                      onClick={() => openCreateWithStatus(col.key)}
                       className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all ${
                         isOver ? 'drop-target border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                       }`}
@@ -242,19 +272,26 @@ export default function BoardPage({ project, issues, sprints, members, onCreateI
       )}
 
       {selectedIssue && (
-        <IssueDetailModal
-          issue={selectedIssue}
-          projectKey={project.key}
-          sprints={sprints}
-          members={members}
-          onClose={() => setSelectedIssue(null)}
-          onUpdate={async (id, update) => {
-            const ok = await onUpdateIssue(id, update);
-            if (ok) setSelectedIssue(prev => prev ? { ...prev, ...update } : null);
-            return ok;
-          }}
-          onDelete={onDeleteIssue}
-        />
+    <IssueDetailModal
+      issue={selectedIssue}
+      projectKey={project.key}
+      sprints={sprints}
+      members={members}
+      projectLabels={projectLabels}
+      issueLabels={issueLabels.filter(il => il.issue_id === selectedIssue.id)}
+      onSetLabels={async (_issueId, labelIds) => {
+        const currentLabelIds = issueLabels.filter(il => il.issue_id === _issueId).map(il => il.label_id);
+        await setLabelsForIssue(_issueId, currentLabelIds, labelIds, projectLabels);
+      }}
+      onClose={() => setSelectedIssue(null)}
+      onUpdate={async (id, update) => {
+        const ok = await onUpdateIssue(id, update);
+        if (ok) setSelectedIssue(prev => prev ? { ...prev, ...update } : null);
+        return ok;
+      }}
+      onDelete={onDeleteIssue}
+      onCreateLabel={(name) => createLabel(name, '#3b82f6')}
+    />
       )}
     </div>
   );

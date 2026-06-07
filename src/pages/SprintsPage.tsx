@@ -1,29 +1,39 @@
 import { useState, FormEvent } from 'react';
 import { Plus, Play, CheckCircle, Trash2, Calendar } from 'lucide-react';
-import type { Project, Sprint, Issue } from '../types';
+import type { Project, Sprint, Issue, SprintStatus } from '../types';
 
 interface Props {
   project: Project;
   sprints: Sprint[];
   issues: Issue[];
-  onCreateSprint: (name: string, goal?: string) => Promise<unknown>;
+  onCreateSprint: (name: string, goal?: string, start_date?: string | null, end_date?: string | null) => Promise<unknown>;
   onUpdateSprint: (id: string, update: Partial<Sprint>) => Promise<void>;
   onDeleteSprint: (id: string) => Promise<void>;
+  onStartSprint?: (id: string) => Promise<void>;
 }
 
-export default function SprintsPage({ project, sprints, issues, onCreateSprint, onUpdateSprint, onDeleteSprint }: Props) {
+export default function SprintsPage({ project, sprints, issues, onCreateSprint, onUpdateSprint, onDeleteSprint, onStartSprint }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newGoal, setNewGoal] = useState('');
+  const [newStart, setNewStart] = useState('');
+  const [newEnd, setNewEnd] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     if (!newName.trim()) return;
     setLoading(true);
-    await onCreateSprint(newName.trim(), newGoal.trim());
+    await onCreateSprint(
+      newName.trim(),
+      newGoal.trim() || undefined,
+      newStart || null,
+      newEnd || null,
+    );
     setNewName('');
     setNewGoal('');
+    setNewStart('');
+    setNewEnd('');
     setShowForm(false);
     setLoading(false);
   }
@@ -36,8 +46,8 @@ export default function SprintsPage({ project, sprints, issues, onCreateSprint, 
     return issues.filter(i => i.sprint_id === sprintId && i.status === 'done').length;
   }
 
-  const statusOrder = { active: 0, planned: 1, completed: 2 };
-  const sorted = [...sprints].sort((a, b) => (statusOrder[a.status as keyof typeof statusOrder] ?? 1) - (statusOrder[b.status as keyof typeof statusOrder] ?? 1));
+  const statusOrder: Record<SprintStatus, number> = { active: 0, planned: 1, completed: 2 };
+  const sorted = [...sprints].sort((a, b) => (statusOrder[a.status] ?? 1) - (statusOrder[b.status] ?? 1));
 
   return (
     <div className="flex flex-col h-full">
@@ -79,6 +89,26 @@ export default function SprintsPage({ project, sprints, issues, onCreateSprint, 
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Start date</label>
+                  <input
+                    type="date"
+                    value={newStart}
+                    onChange={e => setNewStart(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">End date</label>
+                  <input
+                    type="date"
+                    value={newEnd}
+                    onChange={e => setNewEnd(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setShowForm(false)} className="px-4 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors">
                   Cancel
@@ -108,7 +138,7 @@ export default function SprintsPage({ project, sprints, issues, onCreateSprint, 
               active: { label: 'Active', color: 'bg-blue-100 text-blue-700', icon: <Play className="w-3 h-3" /> },
               completed: { label: 'Completed', color: 'bg-emerald-100 text-emerald-700', icon: <CheckCircle className="w-3 h-3" /> },
             };
-            const cfg = statusConfig[sprint.status as keyof typeof statusConfig] ?? statusConfig.planned;
+            const cfg = statusConfig[sprint.status] ?? statusConfig.planned;
 
             return (
               <div key={sprint.id} className="bg-white border border-slate-200 rounded-xl p-5 hover:shadow-sm transition-shadow">
@@ -122,7 +152,7 @@ export default function SprintsPage({ project, sprints, issues, onCreateSprint, 
                     </div>
                     {sprint.goal && <p className="text-xs text-slate-500 mb-3">{sprint.goal}</p>}
 
-                    <div className="flex items-center gap-4 text-xs text-slate-500">
+                    <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
                       <span>{total} issues</span>
                       <span>{done} done</span>
                       {sprint.start_date && <span>Start: {new Date(sprint.start_date).toLocaleDateString()}</span>}
@@ -148,7 +178,10 @@ export default function SprintsPage({ project, sprints, issues, onCreateSprint, 
                   <div className="flex items-center gap-2 shrink-0">
                     {sprint.status === 'planned' && (
                       <button
-                        onClick={() => onUpdateSprint(sprint.id, { status: 'active' })}
+                        onClick={async () => {
+                          if (onStartSprint) await onStartSprint(sprint.id);
+                          else await onUpdateSprint(sprint.id, { status: 'active' });
+                        }}
                         className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors"
                       >
                         <Play className="w-3 h-3" />
