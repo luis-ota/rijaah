@@ -10,16 +10,9 @@ A forma mais rápida de rodar o projeto completo (banco, backend, frontend e see
 docker compose up -d --build
 ```
 
-Depois de ~30 segundos, abra `http://localhost` (porta 80) e faça login com:
+Depois de ~30 segundos, abra `http://localhost` e faça login com:
 - **Email:** `admin@admin.com`
 - **Senha:** `admin123`
-
-Se preferir acessar via porta 5173, edite o `docker-compose.yml`:
-```yaml
-frontend:
-  ports:
-    - "5173:80"
-```
 
 O compose inicia três serviços:
 - `postgres` — banco de dados na porta 5432 (volume `pgdata` para persistência)

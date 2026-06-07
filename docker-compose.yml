@@ -3,14 +3,13 @@ services:
     image: postgres:16-alpine
     container_name: rijaah-postgres
     restart: unless-stopped
+    network_mode: host
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: rijaah
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d rijaah"]
       interval: 3s
@@ -18,20 +17,20 @@ services:
       retries: 20
 
   backend:
-    image: rijaah-test-backend
+    image: rijaah-backend
     build:
       context: ./server
       dockerfile: Dockerfile
+      network: host
     container_name: rijaah-backend
     restart: unless-stopped
+    network_mode: host
     environment:
       PORT: 3001
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rijaah
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/rijaah
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "3001:3001"
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://localhost:3001/auth/me').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
@@ -39,21 +38,21 @@ services:
       retries: 20
 
   frontend:
-    image: rijaah-test-frontend
+    image: rijaah-frontend
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
       args:
         VITE_API_URL: /api
     container_name: rijaah-frontend
     restart: unless-stopped
+    network_mode: host
     environment:
-      BACKEND_URL: http://backend:3001
+      BACKEND_URL: http://localhost:3001
     depends_on:
       backend:
         condition: service_healthy
-    ports:
-      - "5173:80"
 
 volumes:
   pgdata:
