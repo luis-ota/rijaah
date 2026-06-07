@@ -1,12 +1,12 @@
-FROM node:20-alpine
+FROM oven/bun:1-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install --omit=dev
+COPY package*.json bun.lock* ./
+RUN bun install --production
 
 COPY . .
 
 EXPOSE 3001
 
-CMD ["node", "index.js"]
+CMD ["bun", "index.js"]

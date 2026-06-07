@@ -9,10 +9,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "docker:up": "docker compose -f docker-compose.yml -f docker-compose.host.yml up -d --build",
+    "docker:up": "docker compose -f docker-compose.yml -f docker-compose.host.yml up --build",
     "docker:down": "docker compose -f docker-compose.yml -f docker-compose.host.yml down",
     "docker:logs": "docker compose -f docker-compose.yml -f docker-compose.host.yml logs -f",
-    "docker:reset": "docker compose -f docker-compose.yml -f docker-compose.host.yml down -v && docker compose -f docker-compose.yml -f docker-compose.host.yml up -d --build"
+    "docker:reset": "docker compose -f docker-compose.yml -f docker-compose.host.yml down -v && docker compose -f docker-compose.yml -f docker-compose.host.yml up --build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
