@@ -1,0 +1,22 @@
+# docker-compose.override.yml
+# Usado automaticamente pelo `docker compose up` em adicão ao docker-compose.yml
+# Útil em ambientes Docker Desktop onde bridge networking não funciona.
+# Ativa network_mode: host para todos os serviços e ajusta os endpoints internos.
+# Acesse o app em http://localhost (porta 80) e a API em http://localhost:3001
+
+services:
+  postgres:
+    network_mode: host
+    ports: []
+
+  backend:
+    network_mode: host
+    ports: []
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/rijaah
+
+  frontend:
+    network_mode: host
+    ports: []
+    environment:
+      BACKEND_URL: http://localhost:3001

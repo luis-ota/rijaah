@@ -10,14 +10,21 @@ A forma mais rápida de rodar o projeto completo (banco, backend, frontend e see
 docker compose up -d --build
 ```
 
-Depois de ~30 segundos, abra `http://localhost:5173` e faça login com:
+Depois de ~30 segundos, abra `http://localhost` (porta 80) e faça login com:
 - **Email:** `admin@admin.com`
 - **Senha:** `admin123`
+
+Se preferir acessar via porta 5173, edite o `docker-compose.yml`:
+```yaml
+frontend:
+  ports:
+    - "5173:80"
+```
 
 O compose inicia três serviços:
 - `postgres` — banco de dados na porta 5432 (volume `pgdata` para persistência)
 - `backend` — API Express na porta 3001 (executa migrations e seeder automaticamente na primeira vez)
-- `frontend` — build estático do Vite servido via nginx na porta 5173 (faz proxy de `/api/*` para o backend)
+- `frontend` — build estático do Vite servido via nginx (faz proxy de `/api/*` para o backend)
 
 Comandos úteis:
 ```bash

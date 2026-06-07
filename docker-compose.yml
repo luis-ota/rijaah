@@ -22,7 +22,6 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-      network: host
     container_name: rijaah-backend
     restart: unless-stopped
     environment:
@@ -44,7 +43,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      network: host
       args:
         VITE_API_URL: /api
     container_name: rijaah-frontend
